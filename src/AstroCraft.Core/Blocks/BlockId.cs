@@ -1,0 +1,31 @@
+namespace AstroCraft.Core.Blocks;
+
+public enum BlockId : ushort
+{
+    Air = 0,
+    Stone = 1,
+    Dirt = 2,
+    Grass = 3,
+    Sand = 4,
+    Water = 5,
+    Oil = 6,
+    Wood = 7,
+    Leaves = 8,
+    Glass = 9,
+    IronOre = 10,
+    CopperOre = 11,
+    CoalOre = 12,
+    Gravel = 13,
+    Bedrock = 14,
+    Ice = 15,
+    Snow = 16,
+    Concrete = 17,
+    Steel = 18,
+    Bricks = 19,
+    Glowstone = 20,
+    Obsidian = 21,
+    Clay = 22,
+    Moss = 23,
+    Sandstone = 24,
+    Basalt = 25,
+}

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AstroCraft.Client/AstroCraft.Client.csproj" />
+    <Project Path="src/AstroCraft.Core/AstroCraft.Core.csproj" />
+    <Project Path="src/AstroCraft.Server/AstroCraft.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AstroCraft.Tests/AstroCraft.Tests.csproj" />
+  </Folder>
+</Solution>
