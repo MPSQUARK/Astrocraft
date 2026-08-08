@@ -1,6 +1,7 @@
 using System.Numerics;
 using AstroCraft.Core;
 using AstroCraft.Core.Discovery;
+using AstroCraft.Core.Math;
 using AstroCraft.Core.Simulation;
 using AstroCraft.Client.Input;
 using AstroCraft.Client.Networking;
@@ -123,13 +124,19 @@ public sealed class AstroCraftGame : IDisposable
             return;
         }
 
-        if (!_initialMeshBuilt && _session.IsConnected)
+        if (!_initialMeshBuilt && _session.IsConnected && _session.World.LoadedChunkPositions.Any())
         {
             _meshCache.SyncAllLoaded(_renderer);
             _initialMeshBuilt = true;
         }
 
-        _meshCache.Sync(_renderer, _session.DirtyChunks);
+        if (_session.IsConnected)
+        {
+            _session.StreamChunksAroundPlayer();
+        }
+
+        List<ChunkPosition> dirtyChunks = _session.DirtyChunks.ToList();
+        _meshCache.Sync(_renderer, dirtyChunks);
         _session.ClearDirtyChunks();
 
         if (!_renderer.BeginFrame())
@@ -139,7 +146,7 @@ public sealed class AstroCraftGame : IDisposable
 
         float aspect = _window.Size.X / (float)Math.Max(1, _window.Size.Y);
         Matrix4x4 mvp = _renderer.BuildViewProjection(_session.LocalPlayer, aspect);
-        _renderer.DrawChunks(_meshCache.Meshes, mvp);
+        _renderer.DrawChunks(_meshCache.Meshes, mvp, _session.LocalPlayer.EyePosition);
         _renderer.EndFrame();
     }
 

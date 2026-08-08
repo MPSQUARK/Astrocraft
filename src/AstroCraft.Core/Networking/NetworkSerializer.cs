@@ -70,9 +70,9 @@ public static class NetworkSerializer
         return Encoding.UTF8.GetString(payload.Slice(1, length));
     }
 
-    public static byte[] WriteServerWelcome(int playerId, int tick, Vector3 spawnPosition)
+    public static byte[] WriteServerWelcome(int playerId, int tick, Vector3 spawnPosition, int worldSeed, bool flatWorld)
     {
-        byte[] buffer = new byte[1 + 4 + 4 + 12];
+        byte[] buffer = new byte[1 + 4 + 4 + 12 + 4 + 1];
         int offset = 0;
         buffer[offset++] = (byte)MessageType.ServerWelcome;
         BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(offset), playerId);
@@ -80,6 +80,10 @@ public static class NetworkSerializer
         BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(offset), tick);
         offset += 4;
         WriteVector3(buffer.AsSpan(offset), spawnPosition);
+        offset += 12;
+        BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(offset), worldSeed);
+        offset += 4;
+        buffer[offset] = flatWorld ? (byte)1 : (byte)0;
         return buffer;
     }
 

@@ -15,7 +15,14 @@
 
   <ItemGroup>
     <None Include="Shaders\*.spv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Shaders\shader.vert" />
+    <None Include="Shaders\shader.frag" />
   </ItemGroup>
+
+  <Target Name="CompileShaders" BeforeTargets="Build" Condition="'$(VULKAN_SDK)' != '' and Exists('$(VULKAN_SDK)\Bin\glslc.exe')">
+    <Exec Command="&quot;$(VULKAN_SDK)\Bin\glslc.exe&quot; &quot;$(ProjectDir)Shaders\shader.vert&quot; -o &quot;$(ProjectDir)Shaders\shader.vert.spv&quot;" />
+    <Exec Command="&quot;$(VULKAN_SDK)\Bin\glslc.exe&quot; &quot;$(ProjectDir)Shaders\shader.frag&quot; -o &quot;$(ProjectDir)Shaders\shader.frag.spv&quot;" />
+  </Target>
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>

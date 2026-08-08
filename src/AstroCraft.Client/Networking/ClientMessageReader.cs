@@ -10,12 +10,14 @@ namespace AstroCraft.Client.Networking;
 
 internal static class ClientMessageReader
 {
-    public static (int PlayerId, int Tick, Vector3 Spawn) ReadServerWelcome(ReadOnlySpan<byte> payload)
+    public static (int PlayerId, int Tick, Vector3 Spawn, int WorldSeed, bool FlatWorld) ReadServerWelcome(ReadOnlySpan<byte> payload)
     {
         int playerId = BinaryPrimitives.ReadInt32LittleEndian(payload);
         int tick = BinaryPrimitives.ReadInt32LittleEndian(payload[4..]);
         Vector3 spawn = ReadVector3(payload[8..]);
-        return (playerId, tick, spawn);
+        int worldSeed = BinaryPrimitives.ReadInt32LittleEndian(payload[20..]);
+        bool flatWorld = payload[24] == 1;
+        return (playerId, tick, spawn, worldSeed, flatWorld);
     }
 
     public static (int Tick, IReadOnlyList<PlayerStateSnapshot> Players) ReadStateDelta(ReadOnlySpan<byte> payload)

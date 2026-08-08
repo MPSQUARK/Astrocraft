@@ -6,13 +6,16 @@ layout(location = 2) in float inTextureIndex;
 
 layout(location = 0) out vec2 fragUv;
 layout(location = 1) out float fragTextureIndex;
+layout(location = 2) out vec3 fragWorldPos;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 modelViewProjection;
+    vec3 cameraPosition;
 } ubo;
 
 void main() {
     gl_Position = ubo.modelViewProjection * vec4(inPosition, 1.0);
     fragUv = inUv;
     fragTextureIndex = inTextureIndex;
+    fragWorldPos = inPosition;
 }

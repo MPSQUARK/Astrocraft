@@ -62,7 +62,7 @@ public sealed class ClientInputState
         }
 
         _lookDeltaX = (float)(_mouse.Position.X - _lastMouseX) * LookSensitivity;
-        _lookDeltaY = (float)(_mouse.Position.Y - _lastMouseY) * LookSensitivity;
+        _lookDeltaY = (float)(_lastMouseY - _mouse.Position.Y) * LookSensitivity;
         _lastMouseX = _mouse.Position.X;
         _lastMouseY = _mouse.Position.Y;
     }

@@ -24,10 +24,14 @@ public sealed class PlayerState
 
     public Vector3 EyePosition => Position + new Vector3(0f, GameConstants.PlayerEyeHeight, 0f);
 
+    public const float DefaultSpawnPitchRadians = -0.35f;
+
     public void ResetToSpawn(Vector3 spawnPosition)
     {
         Position = spawnPosition;
         Velocity = Vector3.Zero;
+        YawRadians = 0f;
+        PitchRadians = DefaultSpawnPitchRadians;
         Survival.ResetToSpawn();
         BreakProgress = 0f;
         BreakingBlockId = BlockId.Air;

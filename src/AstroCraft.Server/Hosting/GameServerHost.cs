@@ -107,7 +107,9 @@ public sealed class GameServerHost : IDisposable
         byte[] welcome = NetworkSerializer.WriteServerWelcome(
             playerId,
             _gameServer.CurrentTick,
-            client.Player.Position);
+            client.Player.Position,
+            _gameServer.WorldSeed,
+            _gameServer.IsFlatWorld);
         await _udp.SendAsync(welcome, endPoint);
     }
 

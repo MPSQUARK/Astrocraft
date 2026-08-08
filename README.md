@@ -15,7 +15,7 @@ Foundation vertical slice of a Minecraft-inspired engineering survival game (see
 
 - .NET 10 SDK
 - Vulkan-capable GPU and drivers
-- [Vulkan SDK](https://vulkan.lunarg.com/) (optional, for shader recompilation)
+- [Vulkan SDK](https://vulkan.lunarg.com/) (required for shader compilation — `glslc` compiles `Shaders/*.vert`/`*.frag` to SPIR-V at build time when `VULKAN_SDK` is set)
 
 ## Quick start
 

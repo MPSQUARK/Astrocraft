@@ -90,6 +90,28 @@ public sealed class GameWorld
         }
     }
 
+    public IEnumerable<ChunkPosition> EnsureChunksAroundTracked(
+        int centerBlockX,
+        int centerBlockZ,
+        int radiusChunks)
+    {
+        ChunkPosition center = ChunkPosition.FromBlock(centerBlockX, centerBlockZ);
+        for (int dz = -radiusChunks; dz <= radiusChunks; dz++)
+        {
+            for (int dx = -radiusChunks; dx <= radiusChunks; dx++)
+            {
+                ChunkPosition position = new(center.X + dx, center.Z + dz);
+                if (_chunks.ContainsKey(position))
+                {
+                    continue;
+                }
+
+                GetOrCreateChunk(position);
+                yield return position;
+            }
+        }
+    }
+
     public bool IsSolid(int worldX, int worldY, int worldZ)
     {
         BlockId blockId = GetBlock(worldX, worldY, worldZ);

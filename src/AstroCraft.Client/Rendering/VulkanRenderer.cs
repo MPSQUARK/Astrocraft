@@ -58,6 +58,9 @@ public sealed unsafe class VulkanRenderer : IDisposable
     private DescriptorSetLayout _descriptorSetLayout;
     private DescriptorPool _descriptorPool;
     private DescriptorSet[] _descriptorSets = [];
+    private VkImage _depthImage;
+    private DeviceMemory _depthMemory;
+    private ImageView _depthImageView;
     private int _currentFrame;
     private bool _framebufferResized;
     private void* _mappedUniform;
@@ -81,6 +84,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
         CreateLogicalDevice();
         CreateSwapchain();
         CreateImageViews();
+        CreateDepthResources();
         CreateRenderPass();
         CreateDescriptorSetLayout();
         CreatePipeline();
@@ -154,31 +158,38 @@ public sealed unsafe class VulkanRenderer : IDisposable
         clearColorValue.Float32_1 = ClearColor.Y;
         clearColorValue.Float32_2 = ClearColor.Z;
         clearColorValue.Float32_3 = ClearColor.W;
-        ClearValue clearValue = new() { Color = clearColorValue };
-
-        RenderPassBeginInfo renderPassInfo = new()
+        ClearValue colorClear = new() { Color = clearColorValue };
+        ClearValue depthClear = new() { DepthStencil = new ClearDepthStencilValue(1f, 0) };
+        ClearValue[] clearValues = [colorClear, depthClear];
+        fixed (ClearValue* clearValuesPtr = clearValues)
         {
-            SType = StructureType.RenderPassBeginInfo,
-            RenderPass = _renderPass,
-            Framebuffer = _framebuffers[_imageIndex],
-            RenderArea = new Rect2D(new Offset2D(0, 0), _swapchainExtent),
-            ClearValueCount = 1,
-            PClearValues = &clearValue,
-        };
+            RenderPassBeginInfo renderPassInfo = new()
+            {
+                SType = StructureType.RenderPassBeginInfo,
+                RenderPass = _renderPass,
+                Framebuffer = _framebuffers[_imageIndex],
+                RenderArea = new Rect2D(new Offset2D(0, 0), _swapchainExtent),
+                ClearValueCount = (uint)clearValues.Length,
+                PClearValues = clearValuesPtr,
+            };
 
-        _vk.CmdBeginRenderPass(commandBuffer, ref renderPassInfo, SubpassContents.Inline);
+            _vk.CmdBeginRenderPass(commandBuffer, ref renderPassInfo, SubpassContents.Inline);
+        }
         _frameActive = true;
         return true;
     }
 
-    public void DrawChunks(IReadOnlyDictionary<Core.Math.ChunkPosition, ChunkGpuMesh> meshes, Matrix4x4 modelViewProjection)
+    public void DrawChunks(
+        IReadOnlyDictionary<Core.Math.ChunkPosition, ChunkGpuMesh> meshes,
+        Matrix4x4 modelViewProjection,
+        Vector3 cameraPosition)
     {
         if (!_frameActive)
         {
             return;
         }
 
-        UpdateUniformBuffer(modelViewProjection);
+        UpdateUniformBuffer(modelViewProjection, cameraPosition);
 
         CommandBuffer commandBuffer = _commandBuffers[_currentFrame];
         _vk.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, _pipeline);
@@ -327,6 +338,9 @@ public sealed unsafe class VulkanRenderer : IDisposable
 
         _khrSwapchain.DestroySwapchain(_device, _swapchain, null);
         _vk.DestroySampler(_device, _textureSampler, null);
+        _vk.DestroyImageView(_device, _depthImageView, null);
+        _vk.DestroyImage(_device, _depthImage, null);
+        _vk.FreeMemory(_device, _depthMemory, null);
         _vk.DestroyImageView(_device, _textureImageView, null);
         _vk.DestroyImage(_device, _textureImage, null);
         _vk.FreeMemory(_device, _textureMemory, null);
@@ -577,8 +591,77 @@ public sealed unsafe class VulkanRenderer : IDisposable
         }
     }
 
+    private void CreateDepthResources()
+    {
+        Format depthFormat = FindDepthFormat();
+        ImageCreateInfo imageInfo = new()
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Extent = new Extent3D(_swapchainExtent.Width, _swapchainExtent.Height, 1),
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Format = depthFormat,
+            Tiling = ImageTiling.Optimal,
+            InitialLayout = ImageLayout.Undefined,
+            Usage = ImageUsageFlags.DepthStencilAttachmentBit,
+            Samples = SampleCountFlags.Count1Bit,
+            SharingMode = SharingMode.Exclusive,
+        };
+
+        if (_vk.CreateImage(_device, ref imageInfo, null, out _depthImage) != Result.Success)
+        {
+            throw new InvalidOperationException("Failed to create depth image.");
+        }
+
+        _vk.GetImageMemoryRequirements(_device, _depthImage, out MemoryRequirements requirements);
+        MemoryAllocateInfo allocInfo = new()
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = requirements.Size,
+            MemoryTypeIndex = FindMemoryType(requirements.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit),
+        };
+
+        if (_vk.AllocateMemory(_device, ref allocInfo, null, out _depthMemory) != Result.Success)
+        {
+            throw new InvalidOperationException("Failed to allocate depth memory.");
+        }
+
+        _vk.BindImageMemory(_device, _depthImage, _depthMemory, 0);
+
+        ImageViewCreateInfo viewInfo = new()
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = _depthImage,
+            ViewType = ImageViewType.Type2D,
+            Format = depthFormat,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.DepthBit, 0, 1, 0, 1),
+        };
+
+        if (_vk.CreateImageView(_device, ref viewInfo, null, out _depthImageView) != Result.Success)
+        {
+            throw new InvalidOperationException("Failed to create depth image view.");
+        }
+    }
+
+    private Format FindDepthFormat()
+    {
+        Format[] candidates = [Format.D32Sfloat, Format.D32SfloatS8Uint, Format.D24UnormS8Uint];
+        foreach (Format format in candidates)
+        {
+            _vk.GetPhysicalDeviceFormatProperties(_physicalDevice, format, out FormatProperties properties);
+            if ((properties.OptimalTilingFeatures & FormatFeatureFlags.DepthStencilAttachmentBit) != 0)
+            {
+                return format;
+            }
+        }
+
+        throw new InvalidOperationException("No supported depth format found.");
+    }
+
     private void CreateRenderPass()
     {
+        Format depthFormat = FindDepthFormat();
         AttachmentDescription colorAttachment = new()
         {
             Format = _swapchainFormat,
@@ -591,26 +674,44 @@ public sealed unsafe class VulkanRenderer : IDisposable
             FinalLayout = ImageLayout.PresentSrcKhr,
         };
 
+        AttachmentDescription depthAttachment = new()
+        {
+            Format = depthFormat,
+            Samples = SampleCountFlags.Count1Bit,
+            LoadOp = AttachmentLoadOp.Clear,
+            StoreOp = AttachmentStoreOp.DontCare,
+            StencilLoadOp = AttachmentLoadOp.DontCare,
+            StencilStoreOp = AttachmentStoreOp.DontCare,
+            InitialLayout = ImageLayout.Undefined,
+            FinalLayout = ImageLayout.DepthStencilAttachmentOptimal,
+        };
+
         AttachmentReference colorReference = new(0, ImageLayout.ColorAttachmentOptimal);
-        SubpassDescription subpass = new()
+        AttachmentReference depthReference = new(1, ImageLayout.DepthStencilAttachmentOptimal);
+        AttachmentDescription[] attachments = [colorAttachment, depthAttachment];
+        fixed (AttachmentDescription* attachmentsPtr = attachments)
         {
-            PipelineBindPoint = PipelineBindPoint.Graphics,
-            ColorAttachmentCount = 1,
-            PColorAttachments = &colorReference,
-        };
+            SubpassDescription subpass = new()
+            {
+                PipelineBindPoint = PipelineBindPoint.Graphics,
+                ColorAttachmentCount = 1,
+                PColorAttachments = &colorReference,
+                PDepthStencilAttachment = &depthReference,
+            };
 
-        RenderPassCreateInfo renderPassInfo = new()
-        {
-            SType = StructureType.RenderPassCreateInfo,
-            AttachmentCount = 1,
-            PAttachments = &colorAttachment,
-            SubpassCount = 1,
-            PSubpasses = &subpass,
-        };
+            RenderPassCreateInfo renderPassInfo = new()
+            {
+                SType = StructureType.RenderPassCreateInfo,
+                AttachmentCount = (uint)attachments.Length,
+                PAttachments = attachmentsPtr,
+                SubpassCount = 1,
+                PSubpasses = &subpass,
+            };
 
-        if (_vk.CreateRenderPass(_device, ref renderPassInfo, null, out _renderPass) != Result.Success)
-        {
-            throw new InvalidOperationException("Failed to create render pass.");
+            if (_vk.CreateRenderPass(_device, ref renderPassInfo, null, out _renderPass) != Result.Success)
+            {
+                throw new InvalidOperationException("Failed to create render pass.");
+            }
         }
     }
 
@@ -761,6 +862,16 @@ public sealed unsafe class VulkanRenderer : IDisposable
                 PAttachments = &colorBlendAttachment,
             };
 
+            PipelineDepthStencilStateCreateInfo depthStencil = new()
+            {
+                SType = StructureType.PipelineDepthStencilStateCreateInfo,
+                DepthTestEnable = true,
+                DepthWriteEnable = true,
+                DepthCompareOp = CompareOp.Less,
+                DepthBoundsTestEnable = false,
+                StencilTestEnable = false,
+            };
+
             PipelineLayoutCreateInfo pipelineLayoutInfo = new()
             {
                 SType = StructureType.PipelineLayoutCreateInfo,
@@ -783,15 +894,20 @@ public sealed unsafe class VulkanRenderer : IDisposable
                 PViewportState = &viewportState,
                 PRasterizationState = &rasterizer,
                 PMultisampleState = &multisampling,
+                PDepthStencilState = &depthStencil,
                 PColorBlendState = &colorBlending,
                 Layout = _pipelineLayout,
                 RenderPass = _renderPass,
                 Subpass = 0,
             };
 
-            if (_vk.CreateGraphicsPipelines(_device, default, 1, ref pipelineInfo, null, out _pipeline) != Result.Success)
+            Result pipelineResult = _vk.CreateGraphicsPipelines(_device, default, 1, ref pipelineInfo, null, out _pipeline);
+            if (pipelineResult != Result.Success)
             {
-                throw new InvalidOperationException("Failed to create graphics pipeline.");
+                throw new InvalidOperationException(
+                    $"Failed to create graphics pipeline ({pipelineResult}). " +
+                    $"Recompile shaders with scripts/compile-shaders.ps1 (requires Vulkan SDK glslc). " +
+                    $"Vertex SPIR-V: {vertShader.Length} bytes, Fragment SPIR-V: {fragShader.Length} bytes.");
             }
         }
 
@@ -805,21 +921,24 @@ public sealed unsafe class VulkanRenderer : IDisposable
         _framebuffers = new Framebuffer[_swapchainImageViews.Length];
         for (int i = 0; i < _swapchainImageViews.Length; i++)
         {
-            ImageView attachment = _swapchainImageViews[i];
-            FramebufferCreateInfo framebufferInfo = new()
+            ImageView[] attachments = [_swapchainImageViews[i], _depthImageView];
+            fixed (ImageView* attachmentsPtr = attachments)
             {
-                SType = StructureType.FramebufferCreateInfo,
-                RenderPass = _renderPass,
-                AttachmentCount = 1,
-                PAttachments = &attachment,
-                Width = _swapchainExtent.Width,
-                Height = _swapchainExtent.Height,
-                Layers = 1,
-            };
+                FramebufferCreateInfo framebufferInfo = new()
+                {
+                    SType = StructureType.FramebufferCreateInfo,
+                    RenderPass = _renderPass,
+                    AttachmentCount = (uint)attachments.Length,
+                    PAttachments = attachmentsPtr,
+                    Width = _swapchainExtent.Width,
+                    Height = _swapchainExtent.Height,
+                    Layers = 1,
+                };
 
-            if (_vk.CreateFramebuffer(_device, ref framebufferInfo, null, out _framebuffers[i]) != Result.Success)
-            {
-                throw new InvalidOperationException("Failed to create framebuffer.");
+                if (_vk.CreateFramebuffer(_device, ref framebufferInfo, null, out _framebuffers[i]) != Result.Success)
+                {
+                    throw new InvalidOperationException("Failed to create framebuffer.");
+                }
             }
         }
     }
@@ -1139,9 +1258,13 @@ public sealed unsafe class VulkanRenderer : IDisposable
         }
     }
 
-    private void UpdateUniformBuffer(Matrix4x4 modelViewProjection)
+    private void UpdateUniformBuffer(Matrix4x4 modelViewProjection, Vector3 cameraPosition)
     {
-        UniformBufferObject ubo = new() { ModelViewProjection = Matrix4x4.Transpose(modelViewProjection) };
+        UniformBufferObject ubo = new()
+        {
+            ModelViewProjection = Matrix4x4.Transpose(modelViewProjection),
+            CameraPosition = cameraPosition,
+        };
         Marshal.StructureToPtr(ubo, (IntPtr)_mappedUniform, false);
     }
 
@@ -1165,10 +1288,15 @@ public sealed unsafe class VulkanRenderer : IDisposable
             _vk.DestroyImageView(_device, imageView, null);
         }
 
+        _vk.DestroyImageView(_device, _depthImageView, null);
+        _vk.DestroyImage(_device, _depthImage, null);
+        _vk.FreeMemory(_device, _depthMemory, null);
+
         SwapchainKHR oldSwapchain = _swapchain;
         _khrSwapchain.DestroySwapchain(_device, oldSwapchain, null);
         CreateSwapchain();
         CreateImageViews();
+        CreateDepthResources();
         CreateFramebuffers();
         _framebufferResized = false;
     }
@@ -1346,5 +1474,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
     private struct UniformBufferObject
     {
         public Matrix4x4 ModelViewProjection;
+        public Vector3 CameraPosition;
+        private readonly float _padding;
     }
 }

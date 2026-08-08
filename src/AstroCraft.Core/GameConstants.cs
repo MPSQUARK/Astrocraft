@@ -27,7 +27,7 @@ public static class GameConstants
     public const int InventoryColumns = 9;
     public const int InventorySize = InventoryRows * InventoryColumns;
 
-    public const int DefaultViewDistanceChunks = 8;
+    public const int DefaultViewDistanceChunks = 6;
     public const int MaxPlayers = 16;
 
     public const int DiscoveryPort = 27015;

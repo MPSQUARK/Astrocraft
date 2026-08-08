@@ -22,7 +22,7 @@ public sealed class ChunkMeshCache : IDisposable
 
     public void Sync(VulkanRenderer renderer, IEnumerable<ChunkPosition> dirtyChunks)
     {
-        foreach (ChunkPosition dirty in dirtyChunks)
+        foreach (ChunkPosition dirty in dirtyChunks.ToList())
         {
             if (!_world.TryGetChunk(dirty, out Chunk chunk))
             {
@@ -37,7 +37,7 @@ public sealed class ChunkMeshCache : IDisposable
 
     public void SyncAllLoaded(VulkanRenderer renderer)
     {
-        foreach (Chunk chunk in _world.LoadedChunks)
+        foreach (Chunk chunk in _world.LoadedChunks.ToArray())
         {
             if (!chunk.IsDirty && _meshes.ContainsKey(chunk.Position))
             {

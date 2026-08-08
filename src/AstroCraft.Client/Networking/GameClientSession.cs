@@ -8,7 +8,7 @@ using AstroCraft.Core.Networking;
 using AstroCraft.Core.Players;
 using AstroCraft.Core.Simulation;
 using AstroCraft.Core.World;
-using AstroCraft.Client.World;
+using AstroCraft.Core.World.Generation;
 
 namespace AstroCraft.Client.Networking;
 
@@ -19,18 +19,20 @@ public sealed class GameClientSession : IDisposable
     private readonly IPEndPoint _serverEndPoint;
     private readonly BlockRegistry _blockRegistry = BlockRegistry.CreateDefault();
     private readonly PlayerPhysics _physics;
-    private readonly GameWorld _world;
+    private GameWorld _world;
     private readonly Dictionary<int, PlayerState> _remotePlayers = new();
     private readonly HashSet<ChunkPosition> _dirtyChunks = new();
+    private ChunkPosition _lastChunkCenter = new(int.MinValue, int.MinValue);
 
-    public GameClientSession(string serverAddress, int port, bool flatWorld)
+    public GameClientSession(string serverAddress, int port, bool flatWorldHint)
     {
         _serverEndPoint = new IPEndPoint(IPAddress.Parse(serverAddress), port);
         _udp = new UdpClient();
         _udp.Connect(_serverEndPoint);
-        _world = new GameWorld(_blockRegistry, new ClientEmptyWorldGenerator()) { IsFlatWorld = flatWorld };
+        _world = CreateWorld(seed: 0, flatWorldHint);
         _physics = new PlayerPhysics(_blockRegistry);
         LocalPlayer = new PlayerState { DisplayName = "Player" };
+        FlatWorldHint = flatWorldHint;
     }
 
     public GameWorld World => _world;
@@ -39,6 +41,8 @@ public sealed class GameClientSession : IDisposable
     public bool IsConnected { get; private set; }
     public int LocalPlayerId { get; private set; }
     public int ServerTick { get; private set; }
+    public int WorldSeed { get; private set; }
+    public bool FlatWorldHint { get; }
     public IReadOnlyCollection<ChunkPosition> DirtyChunks => _dirtyChunks;
 
     public void SendHello(string playerName)
@@ -63,6 +67,7 @@ public sealed class GameClientSession : IDisposable
         byte[] packet = NetworkSerializer.WritePlayerInput(LocalPlayerId, input);
         _udp.Send(packet);
         PredictLocalPlayer(input);
+        StreamChunksAroundPlayer();
     }
 
     public void Poll()
@@ -123,7 +128,9 @@ public sealed class GameClientSession : IDisposable
 
     private void HandleServerWelcome(ReadOnlySpan<byte> payload)
     {
-        (int playerId, int tick, Vector3 spawn) = ClientMessageReader.ReadServerWelcome(payload);
+        (int playerId, int tick, Vector3 spawn, int worldSeed, bool flatWorld) = ClientMessageReader.ReadServerWelcome(payload);
+        WorldSeed = worldSeed;
+        _world = CreateWorld(worldSeed, flatWorld);
         PlayerState player = new()
         {
             PlayerId = playerId,
@@ -134,6 +141,7 @@ public sealed class GameClientSession : IDisposable
         LocalPlayerId = playerId;
         ServerTick = tick;
         IsConnected = true;
+        StreamChunksAroundPlayer(force: true);
     }
 
     private void HandleStateDelta(ReadOnlySpan<byte> payload)
@@ -170,8 +178,7 @@ public sealed class GameClientSession : IDisposable
             }
         }
 
-        chunk.IsDirty = true;
-        _dirtyChunks.Add(position);
+        MarkChunkDirty(position);
     }
 
     private void HandleBlockChanged(ReadOnlySpan<byte> payload)
@@ -182,12 +189,7 @@ public sealed class GameClientSession : IDisposable
             return;
         }
 
-        ChunkPosition chunkPosition = ChunkPosition.FromBlock(x, z);
-        if (_world.TryGetChunk(chunkPosition, out Chunk chunk))
-        {
-            chunk.IsDirty = true;
-            _dirtyChunks.Add(chunkPosition);
-        }
+        MarkChunkDirty(ChunkPosition.FromBlock(x, z));
     }
 
     private void PredictLocalPlayer(PlayerInput input)
@@ -205,14 +207,14 @@ public sealed class GameClientSession : IDisposable
         LocalPlayer.Survival.Health = snapshot.Health;
         LocalPlayer.Survival.Oxygen = snapshot.Oxygen;
         LocalPlayer.Survival.Hunger = snapshot.Hunger;
+        LocalPlayer.YawRadians = snapshot.YawRadians;
+        LocalPlayer.PitchRadians = snapshot.PitchRadians;
 
         float distance = Vector3.Distance(LocalPlayer.Position, snapshot.Position);
         if (distance > ReconcileDistanceThreshold)
         {
             LocalPlayer.Position = snapshot.Position;
             LocalPlayer.Velocity = snapshot.Velocity;
-            LocalPlayer.YawRadians = snapshot.YawRadians;
-            LocalPlayer.PitchRadians = snapshot.PitchRadians;
             LocalPlayer.IsOnGround = snapshot.IsOnGround;
             return;
         }
@@ -237,5 +239,61 @@ public sealed class GameClientSession : IDisposable
         player.Survival.Health = snapshot.Health;
         player.Survival.Oxygen = snapshot.Oxygen;
         player.Survival.Hunger = snapshot.Hunger;
+    }
+
+    public void StreamChunksAroundPlayer(bool force = false)
+    {
+        ChunkPosition center = ChunkPosition.FromBlock(
+            (int)LocalPlayer.Position.X,
+            (int)LocalPlayer.Position.Z);
+
+        if (!force && center == _lastChunkCenter)
+        {
+            return;
+        }
+
+        _lastChunkCenter = center;
+        foreach (ChunkPosition position in _world.EnsureChunksAroundTracked(
+                     (int)LocalPlayer.Position.X,
+                     (int)LocalPlayer.Position.Z,
+                     GameConstants.DefaultViewDistanceChunks))
+        {
+            MarkChunkDirty(position);
+        }
+    }
+
+    private void MarkChunkDirty(ChunkPosition position)
+    {
+        if (_world.TryGetChunk(position, out Chunk chunk))
+        {
+            chunk.IsDirty = true;
+        }
+
+        _dirtyChunks.Add(position);
+
+        foreach (ChunkPosition neighbor in NeighborChunkPositions(position))
+        {
+            if (_world.TryGetChunk(neighbor, out Chunk neighborChunk))
+            {
+                neighborChunk.IsDirty = true;
+                _dirtyChunks.Add(neighbor);
+            }
+        }
+    }
+
+    private static IEnumerable<ChunkPosition> NeighborChunkPositions(ChunkPosition position)
+    {
+        yield return new ChunkPosition(position.X + 1, position.Z);
+        yield return new ChunkPosition(position.X - 1, position.Z);
+        yield return new ChunkPosition(position.X, position.Z + 1);
+        yield return new ChunkPosition(position.X, position.Z - 1);
+    }
+
+    private GameWorld CreateWorld(int seed, bool flatWorld)
+    {
+        IWorldGenerator generator = flatWorld
+            ? new FlatWorldGenerator()
+            : new ProceduralWorldGenerator(seed);
+        return new GameWorld(_blockRegistry, generator) { IsFlatWorld = flatWorld };
     }
 }

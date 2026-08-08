@@ -31,9 +31,11 @@ public sealed class GameServer
     private readonly ConcurrentDictionary<string, ConnectedClient> _clientsByEndpoint = new();
     private int _nextPlayerId = 1;
     private int _currentTick;
+    private readonly int _seed;
 
     public GameServer(int seed, bool flatWorld)
     {
+        _seed = seed;
         IWorldGenerator generator = flatWorld
             ? new FlatWorldGenerator()
             : new ProceduralWorldGenerator(seed);
@@ -45,6 +47,8 @@ public sealed class GameServer
 
     public GameWorld World => _world;
     public int CurrentTick => _currentTick;
+    public int WorldSeed { get; }
+    public bool IsFlatWorld => _world.IsFlatWorld;
     public IReadOnlyCollection<ConnectedClient> Clients => _clients.Values.ToList();
 
     public int ConnectClient(IPEndPoint endPoint, string playerName)
