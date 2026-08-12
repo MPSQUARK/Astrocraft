@@ -6,3 +6,7 @@ obj/
 .idea/
 *.log
 TestResults/
+ReferenceMaterial/**
+memories/**
+tmp-test-out/
+tmp-build-out/
