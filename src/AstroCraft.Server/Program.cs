@@ -1,5 +1,5 @@
 ﻿using AstroCraft.Core;
-using AstroCraft.Server.Hosting;
+using AstroCraft.Core.Hosting;
 
 if (args.Contains("--help"))
 {

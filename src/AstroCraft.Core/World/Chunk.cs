@@ -6,6 +6,7 @@ namespace AstroCraft.Core.World;
 public sealed class Chunk
 {
     private readonly BlockId[] _blocks = new BlockId[GameConstants.ChunkSizeX * GameConstants.ChunkSizeY * GameConstants.ChunkSizeZ];
+    private readonly byte[] _blockAxes = new byte[GameConstants.ChunkSizeX * GameConstants.ChunkSizeY * GameConstants.ChunkSizeZ];
     public ChunkPosition Position { get; }
     public bool IsDirty { get; set; } = true;
 
@@ -21,11 +22,19 @@ public sealed class Chunk
         return _blocks[Index(localX, localY, localZ)];
     }
 
-    public void SetBlock(int localX, int localY, int localZ, BlockId blockId)
+    public void SetBlock(int localX, int localY, int localZ, BlockId blockId, BlockAxis axis = BlockAxis.Y)
     {
         ValidateLocal(localX, localY, localZ);
-        _blocks[Index(localX, localY, localZ)] = blockId;
+        int index = Index(localX, localY, localZ);
+        _blocks[index] = blockId;
+        _blockAxes[index] = blockId == BlockId.Air ? (byte)BlockAxis.Y : (byte)axis;
         IsDirty = true;
+    }
+
+    public BlockAxis GetBlockAxis(int localX, int localY, int localZ)
+    {
+        ValidateLocal(localX, localY, localZ);
+        return (BlockAxis)_blockAxes[Index(localX, localY, localZ)];
     }
 
     public ReadOnlySpan<BlockId> Blocks => _blocks;

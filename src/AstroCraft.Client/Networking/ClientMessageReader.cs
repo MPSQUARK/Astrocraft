@@ -2,7 +2,10 @@ using System.Buffers.Binary;
 using System.Numerics;
 using AstroCraft.Core;
 using AstroCraft.Core.Blocks;
+using AstroCraft.Core.Crafting;
+using AstroCraft.Core.Entities;
 using AstroCraft.Core.Math;
+using AstroCraft.Core.Networking;
 using AstroCraft.Core.Players;
 using AstroCraft.Core.World;
 
@@ -20,11 +23,12 @@ internal static class ClientMessageReader
         return (playerId, tick, spawn, worldSeed, flatWorld);
     }
 
-    public static (int Tick, IReadOnlyList<PlayerStateSnapshot> Players) ReadStateDelta(ReadOnlySpan<byte> payload)
+    public static (int Tick, float TimeOfDay, IReadOnlyList<PlayerStateSnapshot> Players) ReadStateDelta(ReadOnlySpan<byte> payload)
     {
         int tick = BinaryPrimitives.ReadInt32LittleEndian(payload);
-        int count = BinaryPrimitives.ReadUInt16LittleEndian(payload[4..]);
-        int offset = 6;
+        float timeOfDay = BinaryPrimitives.ReadSingleLittleEndian(payload[4..]);
+        int count = BinaryPrimitives.ReadUInt16LittleEndian(payload[8..]);
+        int offset = 10;
         List<PlayerStateSnapshot> players = new(count);
 
         for (int i = 0; i < count; i++)
@@ -46,6 +50,8 @@ internal static class ClientMessageReader
             offset += 4;
             float hunger = BinaryPrimitives.ReadSingleLittleEndian(payload[offset..]);
             offset += 4;
+            bool isDead = payload[offset++] == 1;
+            int respawnTicksRemaining = payload[offset++];
 
             players.Add(new PlayerStateSnapshot(
                 playerId,
@@ -56,25 +62,47 @@ internal static class ClientMessageReader
                 onGround,
                 health,
                 oxygen,
-                hunger));
+                hunger,
+                isDead,
+                respawnTicksRemaining));
         }
 
-        return (tick, players);
+        return (tick, timeOfDay, players);
+    }
+
+    public static (int Tick, IReadOnlyList<ItemEntitySnapshot> Entities) ReadItemEntitiesDelta(ReadOnlySpan<byte> payload)
+    {
+        int tick = BinaryPrimitives.ReadInt32LittleEndian(payload);
+        int count = BinaryPrimitives.ReadUInt16LittleEndian(payload[4..]);
+        int offset = 6;
+        List<ItemEntitySnapshot> entities = new(count);
+
+        for (int i = 0; i < count; i++)
+        {
+            int id = BinaryPrimitives.ReadInt32LittleEndian(payload[offset..]);
+            offset += 4;
+            Vector3 position = ReadVector3(payload[offset..]);
+            offset += 12;
+            Vector3 velocity = ReadVector3(payload[offset..]);
+            offset += 12;
+            BlockId blockId = (BlockId)BinaryPrimitives.ReadUInt16LittleEndian(payload[offset..]);
+            offset += 2;
+            ItemId itemId = (ItemId)BinaryPrimitives.ReadUInt16LittleEndian(payload[offset..]);
+            offset += 2;
+            int stackCount = payload[offset++];
+            float spin = BinaryPrimitives.ReadSingleLittleEndian(payload[offset..]);
+            offset += 4;
+            entities.Add(new ItemEntitySnapshot(id, position, velocity, blockId, itemId, stackCount, spin));
+        }
+
+        return (tick, entities);
     }
 
     public static (ChunkPosition Position, BlockId[] Blocks) ReadChunkData(ReadOnlySpan<byte> payload)
     {
         int chunkX = BinaryPrimitives.ReadInt32LittleEndian(payload);
         int chunkZ = BinaryPrimitives.ReadInt32LittleEndian(payload[4..]);
-        ReadOnlySpan<byte> blockBytes = payload[8..];
-        int blockCount = GameConstants.ChunkSizeX * GameConstants.ChunkSizeY * GameConstants.ChunkSizeZ;
-        BlockId[] blocks = new BlockId[blockCount];
-
-        for (int i = 0; i < blockCount; i++)
-        {
-            blocks[i] = (BlockId)BinaryPrimitives.ReadUInt16LittleEndian(blockBytes[(i * 2)..]);
-        }
-
+        BlockId[] blocks = ChunkDataCodec.Decode(payload);
         return (new ChunkPosition(chunkX, chunkZ), blocks);
     }
 
@@ -94,4 +122,6 @@ internal readonly record struct PlayerStateSnapshot(
     bool IsOnGround,
     float Health,
     float Oxygen,
-    float Hunger);
+    float Hunger,
+    bool IsDead,
+    int RespawnTicksRemaining);

@@ -1,10 +1,9 @@
+using System.Net;
 using System.Numerics;
 using AstroCraft.Core.Blocks;
 using AstroCraft.Core.Players;
 using AstroCraft.Core.Server;
 using AstroCraft.Core.Simulation;
-using AstroCraft.Core.World;
-using AstroCraft.Core.World.Generation;
 
 namespace AstroCraft.Tests;
 
@@ -38,8 +37,6 @@ public class AuthorityTests
     [Fact]
     public void BlockPlacement_IsServerSideOnly()
     {
-        BlockRegistry registry = BlockRegistry.CreateDefault();
-        GameWorld world = new(registry, new FlatWorldGenerator());
         GameServer server = new(seed: 1, flatWorld: true);
         System.Net.IPEndPoint endpoint = new(System.Net.IPAddress.Loopback, 12347);
         int playerId = server.ConnectClient(endpoint, "Builder");
@@ -65,5 +62,23 @@ public class AuthorityTests
         }
 
         Assert.False(anyConcrete);
+    }
+
+    [Fact]
+    public void GameServer_TwoPlayers_BothRemainConnected()
+    {
+        GameServer server = new(seed: 1, flatWorld: true);
+        IPEndPoint first = new(IPAddress.Loopback, 22301);
+        IPEndPoint second = new(IPAddress.Loopback, 22302);
+        server.ConnectClient(first, "Alpha");
+        server.ConnectClient(second, "Bravo");
+
+        Assert.Equal(2, server.Clients.Count);
+        for (int tick = 0; tick < 40; tick++)
+        {
+            server.Tick();
+        }
+
+        Assert.Equal(2, server.Clients.Count);
     }
 }

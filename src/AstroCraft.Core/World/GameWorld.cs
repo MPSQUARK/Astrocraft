@@ -19,6 +19,8 @@ public sealed class GameWorld
 
     public BlockRegistry BlockRegistry => _blockRegistry;
 
+    public IWorldGenerator Generator => _generator;
+
     public bool IsFlatWorld { get; init; }
 
     public IReadOnlyList<BlockChange> PendingBlockChanges => _pendingBlockChanges;
@@ -38,7 +40,10 @@ public sealed class GameWorld
         return chunk.GetBlock(localX, worldY, localZ);
     }
 
-    public bool TrySetBlock(int worldX, int worldY, int worldZ, BlockId blockId)
+    public bool TrySetBlock(int worldX, int worldY, int worldZ, BlockId blockId) =>
+        TrySetBlock(worldX, worldY, worldZ, blockId, BlockAxis.Y);
+
+    public bool TrySetBlock(int worldX, int worldY, int worldZ, BlockId blockId, BlockAxis axis)
     {
         if (!IsInsideWorld(worldY))
         {
@@ -54,9 +59,22 @@ public sealed class GameWorld
         Chunk chunk = GetOrCreateChunk(ChunkPosition.FromBlock(worldX, worldZ));
         int localX = Mod(worldX, GameConstants.ChunkSizeX);
         int localZ = Mod(worldZ, GameConstants.ChunkSizeZ);
-        chunk.SetBlock(localX, worldY, localZ, blockId);
-        _pendingBlockChanges.Add(new BlockChange(worldX, worldY, worldZ, blockId));
+        chunk.SetBlock(localX, worldY, localZ, blockId, axis);
+        _pendingBlockChanges.Add(new BlockChange(worldX, worldY, worldZ, blockId, axis));
         return true;
+    }
+
+    public BlockAxis GetBlockAxis(int worldX, int worldY, int worldZ)
+    {
+        if (!IsInsideWorld(worldY))
+        {
+            return BlockAxis.Y;
+        }
+
+        Chunk chunk = GetOrCreateChunk(ChunkPosition.FromBlock(worldX, worldZ));
+        int localX = Mod(worldX, GameConstants.ChunkSizeX);
+        int localZ = Mod(worldZ, GameConstants.ChunkSizeZ);
+        return chunk.GetBlockAxis(localX, worldY, localZ);
     }
 
     public Chunk GetOrCreateChunk(ChunkPosition position)
@@ -73,6 +91,8 @@ public sealed class GameWorld
     }
 
     public bool TryGetChunk(ChunkPosition position, out Chunk chunk) => _chunks.TryGetValue(position, out chunk!);
+
+    public bool TryRemoveChunk(ChunkPosition position) => _chunks.Remove(position);
 
     public IEnumerable<ChunkPosition> LoadedChunkPositions => _chunks.Keys;
 
@@ -128,7 +148,7 @@ public sealed class GameWorld
     public bool IsSubmerged(int worldX, int worldY, int worldZ)
     {
         BlockId block = GetBlock(worldX, worldY, worldZ);
-        return block is BlockId.Water or BlockId.Oil;
+        return block is BlockId.Water or BlockId.Oil or BlockId.Lava;
     }
 
     private static bool IsInsideWorld(int worldY) => worldY >= 0 && worldY < GameConstants.WorldHeight;

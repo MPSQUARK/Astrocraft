@@ -1,16 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\AstroCraft.Core\AstroCraft.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Silk.NET.OpenAL" Version="2.23.0" />
     <PackageReference Include="Silk.NET.GLFW" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Input" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Maths" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Vulkan" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Windowing" Version="2.23.0" />
+    <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,9 +21,9 @@
     <None Include="Shaders\shader.frag" />
   </ItemGroup>
 
-  <Target Name="CompileShaders" BeforeTargets="Build" Condition="'$(VULKAN_SDK)' != '' and Exists('$(VULKAN_SDK)\Bin\glslc.exe')">
-    <Exec Command="&quot;$(VULKAN_SDK)\Bin\glslc.exe&quot; &quot;$(ProjectDir)Shaders\shader.vert&quot; -o &quot;$(ProjectDir)Shaders\shader.vert.spv&quot;" />
-    <Exec Command="&quot;$(VULKAN_SDK)\Bin\glslc.exe&quot; &quot;$(ProjectDir)Shaders\shader.frag&quot; -o &quot;$(ProjectDir)Shaders\shader.frag.spv&quot;" />
+  <Target Name="CompileShaders" BeforeTargets="BeforeBuild">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\..\scripts\compile-shaders.ps1&quot;"
+          IgnoreExitCode="false" />
   </Target>
 
   <PropertyGroup>

@@ -19,8 +19,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\AstroCraft.Core\AstroCraft.Core.csproj" />
     <ProjectReference Include="..\..\src\AstroCraft.Server\AstroCraft.Server.csproj" />
+    <ProjectReference Include="..\..\src\AstroCraft.Client\AstroCraft.Client.csproj" />
   </ItemGroup>
 
 </Project>

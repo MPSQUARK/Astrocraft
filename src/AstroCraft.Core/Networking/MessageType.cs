@@ -14,6 +14,11 @@ public enum MessageType : byte
     DiscoveryRequest = 10,
     DiscoveryResponse = 11,
     Disconnect = 12,
+    ItemEntitiesDelta = 13,
+    RequestChunkStream = 14,
+    CraftRequest = 15,
+    FurnaceOutput = 16,
+    RequestChunks = 17,
 }
 
 public static class NetworkProtocol

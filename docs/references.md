@@ -1,4 +1,4 @@
-# AstroCraft — Reference Material
+# AstroCraft — ReferenceMaterial
 
 Gathered before implementation (gauntlet spec requirement).
 
