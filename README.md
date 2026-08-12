@@ -1,6 +1,6 @@
 # AstroCraft
 
-Foundation vertical slice of a Minecraft-inspired engineering survival game (see `GameDesignDocument.md`).
+Tekkit inspired mineclone (see `GameDesignDocument.md`).
 
 ## Projects
 
